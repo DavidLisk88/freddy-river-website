@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// Existing tables (keep as-is)
+model FrBeat {
+  beat_id              Int       @id @default(autoincrement())
+  title                String    @db.VarChar(255)
+  genre                String?   @db.VarChar(100)
+  bpm                  Int?
+  co_producer          String?   @db.VarChar(255)
+  lease_price          Decimal   @db.Decimal(10, 2)
+  exclusive_price      Decimal   @db.Decimal(10, 2)
+  preview_url          String?   @db.VarChar(500)
+  store_url            String?   @db.VarChar(500)
+  is_available         Boolean   @default(true)
+  exclusively_owned_by String?   @db.VarChar(255)
+  created_at           DateTime  @default(now())
+
+  // Relations
+  collaborators        FrBeatCollaborator[]
+  productFiles         FrProductFile[]
+  orderItems           FrOrderItem[]
+
+  @@map("fr_beats")
+}
+
+model FrSample {
+  sample_id        Int       @id @default(autoincrement())
+  title            String    @db.VarChar(255)
+  bpm              Int?
+  musical_key      String?   @db.VarChar(10)
+  belongs_to_pack  Boolean   @default(false)
+  sample_pack      String?   @db.VarChar(255)
+  lease_price      Decimal   @db.Decimal(10, 2)
+  exclusive_price  Decimal   @db.Decimal(10, 2)
+  preview_url      String?   @db.VarChar(500)
+  store_url        String?   @db.VarChar(500)
+  is_available     Boolean   @default(true)
+  created_at       DateTime  @default(now())
+
+  // Relations
+  collaborators    FrSampleCollaborator[]
+  productFiles     FrProductFile[]
+  orderItems       FrOrderItem[]
+
+  @@map("fr_samples")
+}
+
+// New tables
+model FrCustomer {
+  id         BigInt   @id @default(autoincrement())
+  email      String   @unique @db.VarChar(255)
+  name       String   @db.VarChar(255)
+  created_at DateTime @default(now())
+
+  // Relations
+  orders     FrOrder[]
+
+  @@map("fr_customers")
+}
+
+model FrOrder {
+  id                   BigInt      @id @default(autoincrement())
+  customer_id          BigInt
+  provider             OrderProvider
+  provider_payment_id  String      @db.VarChar(255)
+  status               OrderStatus @default(pending)
+  total_cents          Int
+  currency             String      @default("USD") @db.Char(3)
+  created_at           DateTime    @default(now())
+
+  // Relations
+  customer             FrCustomer  @relation(fields: [customer_id], references: [id])
+  items                FrOrderItem[]
+
+  @@map("fr_orders")
+}
+
+model FrOrderItem {
+  id                BigInt      @id @default(autoincrement())
+  order_id          BigInt
+  product_type      ProductType
+  product_id        Int
+  unit_price_cents  Int
+  quantity          Int         @default(1)
+
+  // Relations
+  order             FrOrder     @relation(fields: [order_id], references: [id])
+  beat              FrBeat?     @relation(fields: [product_id], references: [beat_id])
+  sample            FrSample?   @relation(fields: [product_id], references: [sample_id])
+  downloadTokens    FrDownloadToken[]
+
+  @@map("fr_order_items")
+}
+
+model FrCollaborator {
+  id                 BigInt   @id @default(autoincrement())
+  name               String   @db.VarChar(255)
+  email              String   @unique @db.VarChar(255)
+  stripe_account_id  String?  @db.VarChar(255)
+  paypal_payer_id    String?  @db.VarChar(255)
+  created_at         DateTime @default(now())
+
+  // Relations
+  beatCollaborations   FrBeatCollaborator[]
+  sampleCollaborations FrSampleCollaborator[]
+
+  @@map("fr_collaborators")
+}
+
+model FrBeatCollaborator {
+  beat_id         Int
+  collaborator_id BigInt
+  split_percent   Decimal @db.Decimal(5, 2)
+
+  // Relations
+  beat            FrBeat        @relation(fields: [beat_id], references: [beat_id])
+  collaborator    FrCollaborator @relation(fields: [collaborator_id], references: [id])
+
+  @@id([beat_id, collaborator_id])
+  @@map("fr_beat_collaborators")
+}
+
+model FrSampleCollaborator {
+  sample_id       Int
+  collaborator_id BigInt
+  split_percent   Decimal @db.Decimal(5, 2)
+
+  // Relations
+  sample          FrSample      @relation(fields: [sample_id], references: [sample_id])
+  collaborator    FrCollaborator @relation(fields: [collaborator_id], references: [id])
+
+  @@id([sample_id, collaborator_id])
+  @@map("fr_sample_collaborators")
+}
+
+model FrProductFile {
+  product_type     ProductType
+  product_id       Int
+  file_storage_key String      @db.VarChar(500)
+
+  // Relations
+  beat             FrBeat?     @relation(fields: [product_id], references: [beat_id])
+  sample           FrSample?   @relation(fields: [product_id], references: [sample_id])
+
+  @@id([product_type, product_id])
+  @@map("fr_product_files")
+}
+
+model FrDownloadToken {
+  id             BigInt   @id @default(autoincrement())
+  order_item_id  BigInt
+  token          String   @unique @db.Char(48)
+  expires_at     DateTime
+  max_downloads  Int      @default(3)
+  downloads_used Int      @default(0)
+  created_at     DateTime @default(now())
+
+  // Relations
+  orderItem      FrOrderItem @relation(fields: [order_item_id], references: [id])
+
+  @@map("fr_download_tokens")
+}
+
+model FrWebhooksLog {
+  id           BigInt   @id @default(autoincrement())
+  provider     String   @db.VarChar(50)
+  event_type   String   @db.VarChar(100)
+  payload_json String   @db.LongText
+  received_at  DateTime @default(now())
+
+  @@map("fr_webhooks_log")
+}
+
+// Enums
+enum OrderProvider {
+  stripe
+  paypal
+
+  @@map("OrderProvider")
+}
+
+enum OrderStatus {
+  paid
+  refunded
+  failed
+  pending
+
+  @@map("OrderStatus")
+}
+
+enum ProductType {
+  beat
+  sample
+
+  @@map("ProductType")
+}
