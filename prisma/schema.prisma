@@ -92,8 +92,8 @@ model FrOrderItem {
 
   // Relations
   order             FrOrder     @relation(fields: [order_id], references: [id])
-  beat              FrBeat?     @relation(fields: [product_id], references: [beat_id])
-  sample            FrSample?   @relation(fields: [product_id], references: [sample_id])
+  beat              FrBeat?     @relation(fields: [product_id], references: [beat_id], map: "fk_order_item_beat")
+  sample            FrSample?   @relation(fields: [product_id], references: [sample_id], map: "fk_order_item_sample")
   downloadTokens    FrDownloadToken[]
 
   @@map("fr_order_items")
